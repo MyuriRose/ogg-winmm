@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include "player.h"
 #include "stub.h"
+#include "globals.h"
 
 #define MAGIC_DEVICEID 0xCDDA
 #define MEDIA_IDENTITY "CDDA7777CDDA7777"
@@ -73,6 +74,7 @@ DWORD auxVol = -1; // HWORD: Right, LWORD: Left
 int cddaVol = 100;
 int midiVol = 100;
 int waveVol = 100;
+int bufferTimeInMs = 100;
 
 DWORD WINAPI player_main(void *unused)
 {
@@ -136,6 +138,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 			cddaVol = GetPrivateProfileInt("OGG-WinMM", "CDDAVolume", 100, path);
 			midiVol = GetPrivateProfileInt("OGG-WinMM", "MIDIVolume", 100, path);
 			waveVol = GetPrivateProfileInt("OGG-WinMM", "WAVEVolume", 100, path);
+			bufferTimeInMs = GetPrivateProfileInt("OGG-WinMM", "BufferTimeInMs", 100, path);
 
 			if (cddaVol < 0 || cddaVol > 100 ) cddaVol = 100;
 			if (midiVol < 0 || midiVol > 100 ) midiVol = 100;
@@ -195,6 +198,8 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 		plr_stop();
 		if (event) SetEvent(event);
 		if (player) WaitForSingleObject(player, INFINITE);
+
+		plr_cleanup();
 
 		unloadRealDLL();
 	}

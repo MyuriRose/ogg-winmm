@@ -3,10 +3,9 @@
 #include <math.h>
 #include <windows.h>
 #include <vorbis/vorbisfile.h>
+#include "globals.h"
 
 #define WAV_BUF_CNT	(2)				// Dual buffer
-#define WAV_BUF_TME	(1000)				// The expected playtime of the buffer in milliseconds: 1000ms
-#define WAV_BUF_LEN	(44100*2*2*(WAV_BUF_TME/1000))	// 44100Hz, 16-bit, 2-channel, 1 second buffer
 
 bool		plr_run			= false;
 bool		plr_bsy			= false;
@@ -20,7 +19,19 @@ WAVEFORMATEX	plr_fmt			= {0};
 int		plr_que			= 0;
 int		plr_sta[WAV_BUF_CNT]	= {0};
 WAVEHDR		plr_hdr[WAV_BUF_CNT]	= {0};
-char		plr_buf[WAV_BUF_CNT][WAV_BUF_LEN] __attribute__ ((aligned(4)));
+char* plr_buf[WAV_BUF_CNT] = { NULL };
+unsigned int    plr_buf_len = 0;
+
+void plr_cleanup(void)
+{
+	for (int i = 0; i < WAV_BUF_CNT; i++) {
+		if (plr_buf[i] != NULL) {
+			free(plr_buf[i]);
+			plr_buf[i] = NULL;
+		}
+	}
+	plr_buf_len = 0;
+}
 
 void plr_volume(int vol_l, int vol_r)
 {
@@ -50,7 +61,7 @@ void plr_reset(BOOL wait)	// Wait for remaining buffer to drain or not.
 	if (plr_hw) {
 		if (wait) {
 			for (int n = 0; n < WAV_BUF_CNT; n++, plr_que = (plr_que+1) % WAV_BUF_CNT) {
-				if (!(plr_hdr[plr_que].dwFlags & WHDR_DONE)) WaitForSingleObject(plr_ev, WAV_BUF_TME);
+				if (!(plr_hdr[plr_que].dwFlags & WHDR_DONE)) WaitForSingleObject(plr_ev, bufferTimeInMs);
 			}
 		}
 		waveOutReset(plr_hw);
@@ -69,6 +80,16 @@ void plr_reset(BOOL wait)	// Wait for remaining buffer to drain or not.
 
 int plr_play(const char *path, unsigned int from, unsigned int to)
 {
+	if (plr_buf[0] == NULL) {
+		plr_buf_len = 44100 * 2 * 2 * bufferTimeInMs / 1000;
+		for (int i = 0; i < WAV_BUF_CNT; i++) {
+			plr_buf[i] = calloc(1, plr_buf_len);
+			if (plr_buf[i] == NULL) {
+				return 0;
+			}
+		}
+	}
+
 	if (ov_fopen(path, &plr_vf) != 0) return 0;
 
 	vorbis_info *vi = ov_info(&plr_vf, -1);
@@ -156,7 +177,7 @@ int plr_pump()
 		}
 
 		char *buf = plr_buf[i];
-		unsigned int pos = 0, size = plr_len > WAV_BUF_LEN ? WAV_BUF_LEN : plr_len;
+		unsigned int pos = 0, size = plr_len > plr_buf_len ? plr_buf_len : plr_len;
 		while (pos < size) {
 			long bytes = ov_read(&plr_vf, buf + pos, size - pos, 0, 2, 1, NULL);
 
