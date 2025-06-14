@@ -24,14 +24,10 @@
 #define MEDIA_IDENTITY "CDDA7777CDDA7777"
 #define MAX_TRACKS 99
 
-//#define _DEBUG
+#define dprintf(...) if (enableLogging && fh) { fprintf(fh, __VA_ARGS__); fflush(NULL); }
 
-#ifdef _DEBUG
-#define dprintf(...) if (fh) { fprintf(fh, __VA_ARGS__); fflush(NULL); }
+BOOL enableLogging = FALSE;
 FILE *fh = NULL;
-#else
-#define dprintf(...)
-#endif
 
 struct track_info
 {
@@ -109,7 +105,7 @@ DWORD WINAPI player_main(void *unused)
 		/* Sending notify successful message:*/
 		if (command == MCI_PLAY && notify) {
 			notify = 0;
-			SendNotifyMessageA(window, MM_MCINOTIFY, MCI_NOTIFY_SUCCESSFUL, MAGIC_DEVICEID);
+			PostMessageA(window, MM_MCINOTIFY, MCI_NOTIFY_SUCCESSFUL, MAGIC_DEVICEID);
 			dprintf("[Thread] Send MCI_NOTIFY_SUCCESSFUL message\n");
 		}
 
@@ -125,9 +121,6 @@ DWORD WINAPI player_main(void *unused)
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 {
 	if (fdwReason == DLL_PROCESS_ATTACH) {
-#ifdef _DEBUG
-		fh = fopen("winmm.log", "w");
-#endif
 		GetModuleFileName(hinstDLL, path, sizeof(path));
 
 		char *last = strrchr(path, '.');
@@ -139,6 +132,7 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 			midiVol = GetPrivateProfileInt("OGG-WinMM", "MIDIVolume", 100, path);
 			waveVol = GetPrivateProfileInt("OGG-WinMM", "WAVEVolume", 100, path);
 			bufferTimeInMs = GetPrivateProfileInt("OGG-WinMM", "BufferTimeInMs", 100, path);
+			enableLogging = GetPrivateProfileInt("Debug", "Logging", 0, path);
 
 			if (cddaVol < 0 || cddaVol > 100 ) cddaVol = 100;
 			if (midiVol < 0 || midiVol > 100 ) midiVol = 100;
@@ -147,6 +141,11 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 			plr_volume(cddaVol, cddaVol);
 			stub_midivol(midiVol);
 			stub_wavevol(waveVol);
+		}
+
+		if (enableLogging)
+		{
+			fh = fopen("winmm.log", "w");
 		}
 
 		last = strrchr(path, '\\');
@@ -187,13 +186,15 @@ BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
 			}
 		}
 	} else if (fdwReason == DLL_PROCESS_DETACH) {
-#ifdef _DEBUG
-		if (fh)
+		if (enableLogging)
 		{
-			fclose(fh);
-			fh = NULL;
+			if (fh)
+			{
+				fclose(fh);
+				fh = NULL;
+			}
 		}
-#endif
+
 		command = MCI_DELETE;
 		plr_stop();
 		if (event) SetEvent(event);
@@ -358,7 +359,7 @@ MCIERROR WINAPI fake_mciSendCommandA(MCIDEVICEID IDDevice, UINT uMsg, DWORD_PTR 
 						if ((fdwCommand & MCI_FROM) && (fdwCommand & MCI_TO) && (info.first == info.last) && (info.from + 15 >= info.to)) {
 							if (notify) {
 								notify = 0;
-								SendNotifyMessageA(window, MM_MCINOTIFY, MCI_NOTIFY_SUCCESSFUL, MAGIC_DEVICEID);
+								PostMessageA(window, MM_MCINOTIFY, MCI_NOTIFY_SUCCESSFUL, MAGIC_DEVICEID);
 								dprintf("(FROM == TO) Send message but no play\n");
 							}
 						} else {

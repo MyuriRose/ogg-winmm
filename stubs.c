@@ -2,6 +2,9 @@
 #include <stdio.h>
 #include <ctype.h>
 #include "player.h"
+#include "globals.h"
+
+#define dprintf(...) if (enableLogging && fh) { fprintf(fh, __VA_ARGS__); fflush(NULL); }
 
 static float midiVol = 1.0;
 static float waveVol = 1.0;
@@ -979,26 +982,29 @@ MMRESULT WINAPI fake_mixerGetLineControlsW(HMIXEROBJ a0, LPMIXERLINECONTROLSW a1
 
 MMRESULT WINAPI fake_mixerGetControlDetailsA(HMIXEROBJ a0, LPMIXERCONTROLDETAILS a1, DWORD a2)
 {
-	static MMRESULT(WINAPI *funcp)(HMIXEROBJ a0, LPMIXERCONTROLDETAILS a1, DWORD a2) = NULL;
-	if (funcp == NULL)
-		funcp = (void*)GetProcAddress(loadRealDLL(), "mixerGetControlDetailsA");
-	return (*funcp)(a0, a1, a2);
+	LPMIXERCONTROLDETAILS_UNSIGNED pUnsigned = a1->paDetails;
+	pUnsigned->dwValue = auxVol & 0xFFFF;
+	dprintf("fake_mixerGetControlDetailsA, auxVol=%08X\n", auxVol)
+	return MMSYSERR_NOERROR;
 }
 
 MMRESULT WINAPI fake_mixerGetControlDetailsW(HMIXEROBJ a0, LPMIXERCONTROLDETAILS a1, DWORD a2)
 {
-	static MMRESULT(WINAPI *funcp)(HMIXEROBJ a0, LPMIXERCONTROLDETAILS a1, DWORD a2) = NULL;
-	if (funcp == NULL)
-		funcp = (void*)GetProcAddress(loadRealDLL(), "mixerGetControlDetailsW");
-	return (*funcp)(a0, a1, a2);
+	LPMIXERCONTROLDETAILS_UNSIGNED pUnsigned = a1->paDetails;
+	pUnsigned->dwValue = auxVol & 0xFFFF;
+	dprintf("fake_mixerGetControlDetailsW, auxVol=%08X\n", auxVol)
+	return MMSYSERR_NOERROR;
 }
 
 MMRESULT WINAPI fake_mixerSetControlDetails(HMIXEROBJ a0, LPMIXERCONTROLDETAILS a1, DWORD a2)
 {
-	static MMRESULT(WINAPI *funcp)(HMIXEROBJ a0, LPMIXERCONTROLDETAILS a1, DWORD a2) = NULL;
-	if (funcp == NULL)
-		funcp = (void*)GetProcAddress(loadRealDLL(), "mixerSetControlDetails");
-	return (*funcp)(a0, a1, a2);
+	LPMIXERCONTROLDETAILS_UNSIGNED pUnsigned = a1->paDetails;
+	DWORD rawVolume = pUnsigned->dwValue;
+	dprintf("fake_mixerSetControlDetails, rawVolume=%08X\n", rawVolume)
+	auxVol = (rawVolume << 16) | rawVolume;
+	plr_volume((auxVol & 0xFFFF) * cddaVol / 65535, (auxVol >> 16) * cddaVol / 65535);
+
+	return MMSYSERR_NOERROR;
 }
 
 MMRESULT WINAPI fake_timeGetSystemTime(LPMMTIME a0, UINT a1)
